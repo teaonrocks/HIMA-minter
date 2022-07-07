@@ -1,12 +1,6 @@
-# This is a minter for the cardano blockchain.
+# This is a minter for the cardano blockchain, built with Python and [Koios](https://api.koios.rest/).
 
-## built with Python and [Koios](https://api.koios.rest/)
-
----
-
-### This minter work as a shell script that works with the cardano-cli to handle transactions
-
----
+This minter work as a shell script that works with the cardano-cli to handle transactions
 
 ## Working directory
 
