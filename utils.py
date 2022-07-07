@@ -1,4 +1,3 @@
-from ntpath import join
 import requests
 from datetime import datetime
 import os, random, json
@@ -7,17 +6,21 @@ import os, random, json
 class Transaction:
     def __init__(
         self,
+        addr: str,
         hash: str,
         index: int,
         time: str,
+        lovelace: int,
         assets: list,
-        mint_amount: int,
-        sellable: bool,
-        refundable: bool,
+        mint_amount: int = 0,
+        sellable: bool = False,
+        refundable: bool = False,
     ):
+        self.addr = addr
         self.hash = hash
         self.index = index
         self.time = time
+        self.lovelace = lovelace
         self.assets = assets
         self.mint_amount = mint_amount
         self.sellable = sellable
@@ -29,51 +32,55 @@ class Utils:
         response = requests.get(
             f"https://api.koios.rest/api/v0/address_info?_address={addr}"
         ).json()[0]
-        return response["utxo_set"]
-
-    def check_utxo(utxo, mint_price: int):
-        if int(utxo["value"]) > 2000000:
-            if (
-                int(utxo["value"]) % mint_price == 0
-                and int(utxo["value"]) / mint_price != 0
-                and int(utxo["value"]) / mint_price <= 10
-            ):
-                amount = int(int(utxo["value"]) / mint_price)
-                if amount < len(
-                    os.listdir("/Users/archer/Documents/HIMA-dev/minter/metadata")
-                ):
-                    print(f"minting {amount} NFTs")
-                    return Transaction(
-                        hash=utxo["tx_hash"],
-                        index=utxo["tx_index"],
-                        time=utxo["block_time"],
-                        assets=utxo["asset_list"],
-                        mint_amount=amount,
-                        sellable=True,
-                        refundable=True,
-                    )
-            else:
-                print("Invalid amount refundable")
-                return Transaction(
+        utxos = response["utxo_set"]
+        hashes = []
+        for utxo in utxos:
+            hashes.append(utxo["tx_hash"])
+        body = {"_tx_hashes": hashes}
+        address_response = requests.post(
+            f"https://api.koios.rest/api/v0/tx_utxos",
+            json=body,
+            headers={"Content-type": "application/json"},
+        ).json()
+        processed_utxos = []
+        amount = 0
+        for utxo, address in zip(utxos, address_response):
+            for lovelace in address["outputs"]:
+                if lovelace["payment_addr"]["bech32"] == addr:
+                    amount = int(lovelace["value"])
+            processed_utxos.append(
+                Transaction(
+                    addr=address["inputs"][0]["payment_addr"]["bech32"],
                     hash=utxo["tx_hash"],
                     index=utxo["tx_index"],
                     time=utxo["block_time"],
+                    lovelace=amount,
                     assets=utxo["asset_list"],
-                    mint_amount=amount,
-                    sellable=False,
-                    refundable=True,
                 )
-        else:
-            print("Invalid amount un-refundable")
-            return Transaction(
-                hash=utxo["tx_hash"],
-                index=utxo["tx_index"],
-                time=utxo["block_time"],
-                assets=utxo["asset_list"],
-                mint_amount=amount,
-                sellable=False,
-                refundable=False,
             )
+        return processed_utxos
+
+    def check_utxo(utxo, mint_price: int):
+        if utxo.lovelace > 2000000:
+            utxo.refundable = True
+            if (
+                utxo.lovelace % mint_price == 0
+                and utxo.lovelace / mint_price != 0
+                and utxo.lovelace / mint_price <= 10
+            ):
+                amount = int(utxo.lovelace / mint_price)
+                if amount <= len(
+                    os.listdir("/Users/archer/Documents/HIMA-dev/minter/metadata")
+                ):
+                    utxo.mint_amount = amount
+                    utxo.sellable = True
+                else:
+                    utxo.sellable = False
+            else:
+                utxo.sellable = False
+        else:
+            utxo.sellable = False
+            utxo.refundable = False
 
     def sort_txn(txns: list):
         epoch_times = []
@@ -103,6 +110,7 @@ class Utils:
                 metadatas.append(str(json.load(metadata))[1:-1])
         joined_metadata = ",".join(metadatas)
         final_metadata_str = f"{template_top}{joined_metadata}{template_bottom}"
-        print(final_metadata_str.replace("'", '"'))
-        with open("./temp/testing.json", "w") as outfile:
+        with open("./temp/temp.json", "w") as outfile:
             outfile.write(final_metadata_str.replace("'", '"'))
+
+    # def build_mint_command(utxo:Transaction):
