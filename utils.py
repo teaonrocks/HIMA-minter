@@ -1,6 +1,10 @@
 import requests
 from datetime import datetime
 import os, random, json
+from dotenv import load_dotenv
+
+load_dotenv()
+CARDANO_CLI_PATH = "cardano-cli"
 
 
 class Transaction:
@@ -8,7 +12,7 @@ class Transaction:
         self,
         addr: str,
         hash: str,
-        index: int,
+        index: str,
         time: str,
         lovelace: int,
         assets: list,
@@ -29,6 +33,7 @@ class Transaction:
 
 class Utils:
     def fetch_utxo(addr: str):
+        print(f"Fetching utxos from {addr}")
         response = requests.get(
             f"https://api.koios.rest/api/v0/address_info?_address={addr}"
         ).json()[0]
@@ -81,6 +86,9 @@ class Utils:
         else:
             utxo.sellable = False
             utxo.refundable = False
+        print(
+            f"hash: {utxo.hash}#{utxo.index}\naddr: {utxo.addr}\nmint amount: {utxo.mint_amount}\nsellable: {utxo.sellable}\nrefundable: {utxo.refundable}"
+        )
 
     def sort_txn(txns: list):
         epoch_times = []
@@ -90,6 +98,7 @@ class Utils:
             epoch_times.append(epoch_time)
         zipped = zip(epoch_times, txns)
         sorted_txns = [x for _, x in sorted(zipped)]
+        print(f"{len(txns)} transactions sorted.")
         return sorted_txns
 
     def generate_metadata(policyID: str, mint_amount: int):
@@ -112,5 +121,39 @@ class Utils:
         final_metadata_str = f"{template_top}{joined_metadata}{template_bottom}"
         with open("./temp/temp.json", "w") as outfile:
             outfile.write(final_metadata_str.replace("'", '"'))
+        print(f"Metadata generated.\npath: ./temp/temp.json")
 
-    # def build_mint_command(utxo:Transaction):
+    # TODO
+    def build_mint_command(policyid: str, utxo: Transaction, fee: int = 1500000):
+        command_draft_txn = [
+            CARDANO_CLI_PATH,
+            "transaction",
+            "build",
+            "--mainnet",
+            "--alonzo-era",
+        ]
+        txn_input = f"{utxo.hash}#{utxo.index}"
+        command_draft_txn.append("--tx-in")
+        command_draft_txn.append(txn_input)
+
+        txn_output = f"{utxo.addr}+{fee}"
+        for x in range(utxo.mint_amount):
+            txn_output += f"+1{policyid}."
+
+    def snapshot(policyid: str):
+        response = requests.get(
+            f"https://api.koios.rest/api/v0/asset_policy_info?_asset_policy={policyid}"
+        ).json()
+        asset_names = []
+        for assets in response:
+            asset_names.append(assets["asset_name"])
+        del asset_names[0]
+        holders = []
+        for name in asset_names:
+            holder_res = requests.get(
+                f"https://api.koios.rest/api/v0/asset_address_list?_asset_policy={policyid}&_asset_name={name}"
+            ).json()
+            holders.append(holder_res[0])
+        with open("./snapshot.json", "w") as outfile:
+            outfile.write(json.dumps(holders))
+        print(f"snapshot of {policyid} completed")
