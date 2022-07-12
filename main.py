@@ -8,11 +8,12 @@ PAYMENT_ADDR = os.getenv("PAYMENT_ADDR")
 POLICY_ID = os.getenv("POLICY_ID")
 HALLPASS_POLICY_ID = os.getenv("HALLPASS_POLICY_ID")
 PROFIT_ADDR = os.getenv("PROFIT_ADDR")
-TXN_FILE_PATH = "/Users/archer/Documents/HIMA-dev/minter/transactions"
-TEMP_METADATA_PATH = "/Users/archer/Documents/HIMA-dev/minter/temp/temp.json"
-POLICY_SCRIPT_PATH = "/Users/archer/Documents/HIMA-dev/minter/policy/policy.script"
-PAYMENT_SKEY = "/Users/archer/Documents/HIMA-dev/minter/keys/payment.skey"
-POLICY_SKEY = "/Users/archer/Documents/HIMA-dev/minter/policy/policy.skey"
+ROOT_PATH = os.getenv("ROOT_PATH")
+TXN_FILE_PATH = f"{ROOT_PATH}/transactions"
+TEMP_METADATA_PATH = f"{ROOT_PATH}/temp/temp.json"
+POLICY_SCRIPT_PATH = f"{ROOT_PATH}/policy/policy.script"
+PAYMENT_SKEY = f"{ROOT_PATH}/keys/payment.skey"
+POLICY_SKEY = f"{ROOT_PATH}/policy/policy.skey"
 worker = Utils
 
 # Create DB
