@@ -38,3 +38,13 @@ This minter work as a shell script that works with the cardano-cli to handle tra
 │
 └── utils.py
 ```
+
+## .env
+
+```
+PAYMENT_ADDR = addr~
+PROFIT_ADDR = addr~
+POLICY_ID = ~
+HALLPASS_POLICY_ID = ~
+ROOT_PATH = "~"
+```
