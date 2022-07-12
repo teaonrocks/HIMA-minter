@@ -15,8 +15,15 @@ PAYMENT_SKEY = "/Users/archer/Documents/HIMA-dev/minter/keys/payment.skey"
 POLICY_SKEY = "/Users/archer/Documents/HIMA-dev/minter/policy/policy.skey"
 worker = Utils
 
+# Create DB
+# worker.create_db()
+
+# Snapshot holders of hallpass
+# worker.snapshot(HALLPASS_POLICY_ID)
+
 # Fetch transactions
 utxos = worker.fetch_utxo(PAYMENT_ADDR)
+
 # Check transctions
 for utxo in utxos:
     worker.check_utxo(utxo=utxo, mint_price=5000000)
@@ -66,7 +73,3 @@ for utxo in utxos:
             for metadata in metadata_paths:
                 filename = metadata.split("/", 1)[1]
                 shutil.move(f"./{metadata}", f"./minted/{filename}")
-
-
-# Snapshot holders of hallpass
-# worker.snapshot(HALLPASS_POLICY_ID)
