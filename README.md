@@ -5,27 +5,36 @@ This minter work as a shell script that works with the cardano-cli to handle tra
 ## Working directory
 
 ```
-├── keys  # Created by Cardano-CLI
+├── db.sqlite
+│
+├── keys
 │   ├── payment.addr
 │   ├── payment.skey
 │   └── payment.vkey
 │
 ├── main.py
 │
-├── metadata  # Metadata for individual NFTs
-│   ├── NFT1.json
-│   └── NFT2.json
+├── metadata
+│   └── example1.json
 │
-├── policy  # Created by Cardano-CLI
+├── minted
+│   ├── example2.json
+│   └── example3.json
+│
+├── policy
 │   ├── policy.script
 │   ├── policy.skey
 │   ├── policy.vkey
 │   └── policyID
 │
-├── protocol.json  # Created by Cardano-CLI
+├── protocol.json
 │
-├── temp  # Temporary json metadata for minting multiple NFTs
+├── temp
 │   └── temp.json
+│
+├── transactions
+│   ├── matx.raw
+│   └── matx.signed
 │
 └── utils.py
 ```
