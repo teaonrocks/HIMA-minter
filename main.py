@@ -1,4 +1,4 @@
-from utils import Utils
+from utils import Utils, updateDB
 from dotenv import load_dotenv
 import os
 import shutil
@@ -27,7 +27,9 @@ utxos = worker.fetch_utxo(PAYMENT_ADDR)
 
 # Check transctions
 for utxo in utxos:
-    worker.check_utxo(utxo=utxo, mint_price=5000000)
+    worker.check_utxo(
+        utxo=utxo, mint_price=5000000, whitelist=True, discount_price=4000000
+    )
 
 # Sort transactions by time received
 sorted_utxos = worker.sort_txn(txns=utxos)
@@ -71,6 +73,7 @@ for utxo in utxos:
     submitted = worker.submit_txn(bodyfile=f"{TXN_FILE_PATH}/matx.signed")
     if submitted:
         if utxo.sellable:
+            updateDB(stake_id=utxo.stake_id, col_name="discount_minted", col_value=1)
             for metadata in metadata_paths:
                 filename = metadata.split("/", 1)[1]
                 shutil.move(f"./{metadata}", f"./minted/{filename}")

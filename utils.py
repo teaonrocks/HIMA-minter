@@ -1,7 +1,8 @@
-from urllib.request import HTTPDefaultErrorHandler
 import requests
 from datetime import datetime
-import os, random, json
+import os
+import random
+import json
 import subprocess
 import sqlite3
 from colorama import init
@@ -15,6 +16,50 @@ def get_current_slot():
     response = requests.get("https://api.koios.rest/api/v0/tip").json()
     slot = int(response[0]["abs_slot"])
     return slot
+
+
+def updateDB(stake_id: str, col_name: str, col_value: int):
+    db = sqlite3.connect("db.sqlite", isolation_level=None)
+    cursor = db.cursor()
+    cursor.execute(
+        f"""
+            SELECT DISTINCT stake_ID
+            FROM main
+            WHERE stake_ID = "{stake_id}"
+    """
+    )
+    if cursor.fetchone():
+        cursor.execute(
+            f"""
+                UPDATE main
+                SET {col_name} = {col_name} + {col_value}
+                WHERE stake_ID = "{stake_id}"
+        """
+        )
+    else:
+        cursor.execute(
+            f"""
+                INSERT INTO main (stake_ID, {col_name})
+                VALUES ("{stake_id}", {col_value});
+        """
+        )
+
+
+def get_row_DB(stake_id: str):
+    db = sqlite3.connect("db.sqlite", isolation_level=None)
+    cursor = db.cursor()
+    cursor.execute(
+        f"""
+        SELECT
+        discount_available,
+        discount_minted,
+        whitelist_available,
+        whitelist_minted
+        FROM main
+        WHERE stake_ID = "{stake_id}"
+        """
+    )
+    return cursor.fetchone()
 
 
 class Transaction:
@@ -165,10 +210,27 @@ class Utils:
         # Return list of Transaction object
         return processed_utxos
 
-    def check_utxo(utxo: Transaction, mint_price: int, whitelist: bool = False):
+    def check_utxo(
+        utxo: Transaction,
+        mint_price: int,
+        whitelist: bool = False,
+        discount_price: int = 0,
+    ):
         # Check if UTxO is refundable
         if utxo.lovelace > 2000000:
             utxo.refundable = True
+            discounted = False
+            if get_row_DB(stake_id=utxo.stake_id) is not None:
+                (
+                    discount_available,
+                    discount_minted,
+                    whitelist_available,
+                    whitelist_minted,
+                ) = get_row_DB(stake_id=utxo.stake_id)
+                if discount_available > discount_minted:
+                    mint_price = discount_price
+                    discounted = True
+
             # Check if UTxO has assets
             if len(utxo.assets) == 0:
                 amount = int(utxo.lovelace / mint_price)
@@ -181,16 +243,41 @@ class Utils:
                         os.listdir("/Users/archer/Documents/HIMA-dev/minter/metadata")
                     )
                 ):
-                    utxo.mint_amount = amount
-                    utxo.sellable = True
+                    if discounted:
+                        (
+                            discount_available,
+                            discount_minted,
+                            whitelist_available,
+                            whitelist_minted,
+                        ) = get_row_DB(stake_id=utxo.stake_id)
+                        if utxo.mint_amount <= discount_available:
+                            utxo.mint_amount = amount
+                            utxo.sellable = True
+                    if whitelist:
+                        whitelisted = False
+                        if get_row_DB(stake_id=utxo.stake_id) is not None:
+                            (
+                                discount_available,
+                                discount_minted,
+                                whitelist_available,
+                                whitelist_minted,
+                            ) = get_row_DB(stake_id=utxo.stake_id)
+                            if (
+                                discount_available > discount_minted
+                                or whitelist_available > whitelist_minted
+                            ):
+                                whitelisted = True
+                        if whitelisted:
+                            if utxo.mint_amount <= whitelist_available:
+                                utxo.mint_amount = amount
+                                utxo.sellable = True
+                    else:
+                        utxo.mint_amount = amount
+                        utxo.sellable = True
 
         print(
             colored(
-                f"""hash: {utxo.hash}#{utxo.index}\n
-                addr: {utxo.addr}\n
-                mint amount: {utxo.mint_amount}\n
-                sellable: {utxo.sellable}\n
-                refundable: {utxo.refundable}\n""",
+                f"""hash: {utxo.hash}#{utxo.index}\naddr: {utxo.addr}\nmint amount: {utxo.mint_amount}\nsellable: {utxo.sellable}\nrefundable: {utxo.refundable}\n""",
                 "blue",
             )
         )
@@ -199,7 +286,7 @@ class Utils:
         epoch_times = [
             datetime.strptime(txn.time, "%Y-%m-%dT%H:%M:%S").strftime(
                 "%s"
-            )  # Convert block time to Epoch time
+            )  # Convert block time to epoch time
             for txn in txns
         ]
         zipped = zip(epoch_times, txns)
@@ -311,6 +398,7 @@ class Utils:
         sellable: bool, policy_skey: str, payment_skey: str, bodyfile: str, outfile: str
     ):
         if sellable:
+            # Building command to sign transaction
             command = [
                 CARDANO_CLI_PATH,
                 "transaction",
@@ -325,13 +413,14 @@ class Utils:
                 "--out-file",
                 f"{outfile}/matx.signed",
             ]
+            # Run command to sign transaction
             sign_txn = subprocess.Popen(command, stdout=subprocess.PIPE)
             output, error = sign_txn.communicate()
             if error:
                 print("Error: ", error)
             print(colored("Mint transaction signed\n", "green"))
         else:
-            print("Signing refund txn")
+            # Building command to sign transaction
             command = [
                 CARDANO_CLI_PATH,
                 "transaction",
@@ -344,6 +433,7 @@ class Utils:
                 "--out-file",
                 f"{outfile}/matx.signed",
             ]
+            # Run command to sign transaction
             sign_txn = subprocess.Popen(command, stdout=subprocess.PIPE)
             output, error = sign_txn.communicate()
             if error:
@@ -351,7 +441,7 @@ class Utils:
             print(colored("Refund transaction signed\n", "green"))
 
     def submit_txn(bodyfile: str):
-        print("submitting txn")
+        # Build command to submit transaction
         command = [
             CARDANO_CLI_PATH,
             "transaction",
@@ -360,12 +450,14 @@ class Utils:
             f"{bodyfile}",
             "--mainnet",
         ]
+        # Run command to submit transaction
         submit = subprocess.Popen(command, stdout=subprocess.PIPE)
         output, error = submit.communicate()
         if error:
             print("Error: ", error)
             return False
         output = str(output)
+        # Check output to make sure transaction submitted successfully
         if (
             output.split("'", 1)[1].split(".", 1)[0]
             != "Transaction successfully submitted"
@@ -383,22 +475,24 @@ class Utils:
             CREATE TABLE IF NOT EXISTS main
             (
                 stake_ID TEXT,
-                discounts_available INTEGER DEFAULT 0,
+                discount_available INTEGER DEFAULT 0,
                 discount_minted INTEGER DEFAULT 0,
                 whitelist_available INTEGER DEFAULT 0,
                 whitelist_minted INTEGER DEFAULT 0
             )
         """
         )
+        print(colored("New DB created", "green"))
 
     def snapshot(policyid: str):
+        # Get all asset name from policy ID using Koios API
         response = requests.get(
             f"https://api.koios.rest/api/v0/asset_policy_info?_asset_policy={policyid}"
         ).json()
-        asset_names = []
-        for assets in response:
-            asset_names.append(assets["asset_name"])
-        del asset_names[0]
+        asset_names = [
+            assets["asset_name"] for assets in response if assets["asset_name"] != ""
+        ]
+        # Get holder address from Koios API
         holder_addrs = []
         for index, name in enumerate(asset_names):
             holder_addr = requests.get(
@@ -406,7 +500,9 @@ class Utils:
             ).json()[0]["payment_address"]
             holder_addrs.append(holder_addr)
             print(f"{index+1}/350: {holder_addr}")
+        # Get holder stake address from Koios API
         for index, holder_addr in enumerate(holder_addrs):
+            # Skip JPG wallet
             if (
                 holder_addr
                 == "addr1w999n67e86jn6xal07pzxtrmqynspgx0fwmcmpua4wc6yzsxpljz3"
@@ -421,6 +517,7 @@ class Utils:
                     f"https://api.koios.rest/api/v0/address_info?_address={holder_addr}"
                 )
             stake_id = stake_response.json()[0]["stake_address"]
+            # Skip JPG wallet
             if (
                 stake_id
                 == "stake1uxqh9rn76n8nynsnyvf4ulndjv0srcc8jtvumut3989cqmgjt49h6"
@@ -428,28 +525,13 @@ class Utils:
                 print(colored("skipping JPG wallet", "blue"))
                 continue
             print(f"{index+1}/350: {stake_id}")
-            db = sqlite3.connect("db.sqlite", isolation_level=None)
-            cursor = db.cursor()
-            cursor.execute(
-                f"""
-                SELECT DISTINCT stake_ID
-                FROM main
-                WHERE stake_ID = "{stake_id}"
-            """
-            )
-            if cursor.fetchone():
-                cursor.execute(
-                    f"""
-                    UPDATE main
-                    SET discounts_available = discounts_available + 3
-                    WHERE stake_ID = "{stake_id}"
-                    """
-                )
-            else:
-                cursor.execute(
-                    f"""
-                    INSERT INTO main (stake_ID, discounts_available)
-                    VALUES ("{stake_id}", 3);
-                    """
-                )
+            # Add to db
+            updateDB(stake_id=stake_id, col_name="discount_available", col_value=3)
         print(colored(f"snapshot of {policyid} completed", "green"))
+
+
+# updateDB(
+#     stake_id="stake1uxm98adud0u2a79wx2hagvvysyz0rnfdmkj53m3rusa0y8scj6z9q",
+#     col_name="discount_available",
+#     col_value=1,
+# )
