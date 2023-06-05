@@ -530,8 +530,3 @@ class Utils:
         print(colored(f"snapshot of {policyid} completed", "green"))
 
 
-# updateDB(
-#     stake_id="stake1uxm98adud0u2a79wx2hagvvysyz0rnfdmkj53m3rusa0y8scj6z9q",
-#     col_name="discount_available",
-#     col_value=1,
-# )
